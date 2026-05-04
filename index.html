@@ -438,15 +438,15 @@ function renderTable() {
       <td style="color:#C05000;">${p.pm_qty>0?p.pm_qty:'<span style="color:#ddd;">—</span>'}</td>
       <td>${p.required>0?'<strong>'+p.required.toLocaleString()+'</strong>':'<span style="color:#ddd;">0</span>'}</td>
       <td>${p.shortage>0?'<strong style="color:#c0392b;">-'+p.shortage.toLocaleString()+'</strong>':'<span style="color:#27ae60;">0</span>'}</td>
-      <td><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%;background:${barColor(pct)};"></span></span>
-          <span style="font-size:9px;color:#666;margin-left:4px;">${pct.toFixed(0)}%</span></td>
-      <td style="text-align:center;">${p.lead_time>0?`<span style="font-size:10px;font-weight:600;color:${p.lead_time>=60?'#c0392b':p.lead_time>=30?'#e67e22':'#27ae60'}">${p.lead_time}d</span>`:'<span style="color:#ccc;">—</span>'}</td>
       <td style="text-align:center;">${p.qty_pending>0
         ? `<span style="color:#1a5276;font-weight:700;">+${Math.round(p.qty_pending).toLocaleString()}</span>${p.earliest_date
             ? `<br><span style="font-size:9px;color:#888;">${new Date(p.earliest_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>`
             : ''}`
         : '<span style="color:#ccc;font-size:10px;">—</span>'
       }</td>
+      <td><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%;background:${barColor(pct)};"></span></span>
+          <span style="font-size:9px;color:#666;margin-left:4px;">${pct.toFixed(0)}%</span></td>
+      <td style="text-align:center;">${p.lead_time>0?`<span style="font-size:10px;font-weight:600;color:${p.lead_time>=60?'#c0392b':p.lead_time>=30?'#e67e22':'#27ae60'}">${p.lead_time}d</span>`:'<span style="color:#ccc;">—</span>'}</td>
       <td>${statusBadge(p)}</td>
     </tr>`;
   }).join('');
