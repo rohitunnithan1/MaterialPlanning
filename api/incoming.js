@@ -1,4 +1,7 @@
-// Fetches all open Purchase Orders and returns pending qty + schedule date per item
+// Increase Vercel function timeout to 60s (needed for scanning many open POs)
+export const config = { maxDuration: 60 };
+
+// Fetches open Purchase Orders (last 3 months) and returns pending qty + schedule date per item
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
@@ -17,9 +20,13 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Step 1: Get all open POs
+    // Step 1: Get open POs from last 6 months only (keeps count manageable)
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
     const filters = encodeURIComponent(JSON.stringify([
-      ['status', 'in', ['To Receive and Bill', 'Partially Received']]
+      ['status', 'in', ['To Receive and Bill', 'Partially Received']],
+      ['transaction_date', '>=', cutoffStr]
     ]));
     const poListUrl = `${ERP_URL}/api/resource/Purchase Order?filters=${filters}&fields=["name","supplier","transaction_date","status"]&limit=500`;
     const poListResp = await fetch(poListUrl, { headers });
@@ -27,7 +34,7 @@ export default async function handler(req, res) {
     const openPOs = poListData.data || [];
 
     // Step 2: Fetch each PO in parallel batches of 20
-    const BATCH = 20;
+    const BATCH = 30;
     const incoming = {}; // { item_code: { qty_pending, earliest_date, supplier, po, po_count } }
 
     for (let i = 0; i < openPOs.length; i += BATCH) {
