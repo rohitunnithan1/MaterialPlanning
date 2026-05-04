@@ -221,8 +221,8 @@ function updateSummary() {
   const zeroParts  = tableData.filter(p=>p.stock<=0 && p.required>0);
   let maxXt=9999, maxPm=9999;
   for (const p of Object.values(PARTS)) {
-    if (p.xt_qty>0) maxXt = Math.min(maxXt, Math.floor(p.stock/p.xt_qty));
-    if (p.pm_qty>0) maxPm = Math.min(maxPm, Math.floor(p.stock/p.pm_qty));
+    if (p.xt_qty>0) maxXt = Math.min(maxXt, Math.floor((p.stock||0)/p.xt_qty));
+    if (p.pm_qty>0) maxPm = Math.min(maxPm, Math.floor((p.stock||0)/p.pm_qty));
   }
   const cards = [
     {label:'Max XT Lite Buildable', val:maxXt>=9999?'∞':maxXt, sub:'units from current stock', cls:maxXt>=xtN?'ok':'bad'},
@@ -289,7 +289,7 @@ function renderTable() {
       <td style="font-size:10px;color:#555;">${p.item_group||'<span style="color:#ccc;">—</span>'}</td>
       <td>${classBadge(p.cls)}</td>
       <td>${usedInBadge(p.usedIn)}</td>
-      <td><strong>${p.stock.toLocaleString()}</strong> <span style="color:#aaa;font-size:9px;">${p.uom}</span></td>
+      <td><strong>${(p.stock||0).toLocaleString()}</strong> <span style="color:#aaa;font-size:9px;">${p.uom}</span></td>
       <td style="text-align:center;">${p.safety_stock>0?'<strong style="color:#1F4E79;">'+p.safety_stock+'</strong>':'<span style="color:#ccc;">—</span>'}</td>
       <td style="color:#1F4E79;">${p.xt_qty>0?p.xt_qty:'<span style="color:#ddd;">—</span>'}</td>
       <td style="color:#C05000;">${p.pm_qty>0?p.pm_qty:'<span style="color:#ddd;">—</span>'}</td>
