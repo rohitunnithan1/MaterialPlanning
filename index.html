@@ -470,7 +470,7 @@ function renderTable() {
       <td>${p.required>0?'<strong>'+p.required.toLocaleString()+'</strong>':'<span style="color:#ddd;">0</span>'}</td>
       <td>${p.shortage>0?'<strong style="color:#c0392b;">-'+p.shortage.toLocaleString()+'</strong>':'<span style="color:#27ae60;">0</span>'}</td>
       <td class="${p.qty_pending>0?'on-order-cell':''}" style="text-align:center;"
-          ${p.qty_pending>0?`onclick="showPOs('${p.code}','${p.name.replace(/'/g,"\\'")}','${JSON.stringify(p.pos||[]).replace(/'/g,"\\'")}')"`:''}
+          ${p.qty_pending>0?`onclick="showPOs('${p.code}','${p.name.replace(/'/g,"\\'")}')"`:''}
           title="${p.qty_pending>0?'Click to view POs':''}">
         ${p.qty_pending>0
           ? `<span style="color:#1a5276;font-weight:700;">+${Math.round(p.qty_pending).toLocaleString()}</span>${p.earliest_date
@@ -594,8 +594,8 @@ function closeWH() { document.getElementById('whOverlay').classList.remove('open
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeWH(); });
 
 // ── PO list popup ──────────────────────────────────────────────
-function showPOs(code, name, posJson) {
-  const pos = JSON.parse(posJson);
+function showPOs(code, name) {
+  const pos = (INCOMING[code] && INCOMING[code].pos) || [];
   document.getElementById('poTitle').textContent = `Open POs — ${code} · ${name}`;
   const erpBase = IS_LOCAL ? ERP : '';
   document.getElementById('poList').innerHTML = pos.map(p => {
