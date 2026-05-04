@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
   const codes = items.split(',').filter(Boolean);
   const filters = encodeURIComponent(JSON.stringify([['item_code', 'in', codes]]));
-  const url = `${ERP_URL}/api/resource/Bin?filters=${filters}&fields=["item_code","actual_qty"]&limit=600`;
+  const url = `${ERP_URL}/api/resource/Bin?filters=${filters}&fields=["item_code","warehouse","actual_qty"]&limit=600`;
 
   try {
     const resp = await fetch(url, {
@@ -28,10 +28,12 @@ export default async function handler(req, res) {
       }
     });
     const data = await resp.json();
-    // Aggregate by item_code (sum across warehouses)
+    // Return per-warehouse breakdown: { item_code: { "Stores-Bengaluru": qty, ... } }
     const stock = {};
     for (const row of (data.data || [])) {
-      stock[row.item_code] = (stock[row.item_code] || 0) + (row.actual_qty || 0);
+      const wh = row.warehouse.split(' - ')[0]; // strip company suffix
+      if (!stock[row.item_code]) stock[row.item_code] = {};
+      stock[row.item_code][wh] = (stock[row.item_code][wh] || 0) + (row.actual_qty || 0);
     }
     res.status(200).json({ stock });
   } catch (err) {

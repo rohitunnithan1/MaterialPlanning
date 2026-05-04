@@ -56,6 +56,22 @@
   .tab.active { background: #1F4E79; color: white; border-color: #1F4E79; }
   .search { margin-left: auto; padding: 5px 12px; border: 1.5px solid #dde3ec; border-radius: 20px; font-size: 11px; outline: none; width: 200px; }
 
+  /* Warehouse filter dropdown */
+  .wh-filter-wrap { position:relative; }
+  .wh-filter-btn { display:flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; color:white; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .wh-filter-btn:hover { background:rgba(255,255,255,0.25); }
+  .wh-filter-badge { background:#e67e22; color:white; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:800; }
+  .wh-dropdown { display:none; position:absolute; top:calc(100% + 6px); right:0; background:white; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.18); min-width:260px; z-index:500; overflow:hidden; }
+  .wh-dropdown.open { display:block; }
+  .wh-dropdown-header { padding:10px 14px; background:#f8fbff; border-bottom:1px solid #eee; font-size:11px; font-weight:700; color:#555; display:flex; justify-content:space-between; align-items:center; }
+  .wh-dropdown-header a { font-size:10px; color:#1F4E79; cursor:pointer; text-decoration:underline; }
+  .wh-option { display:flex; align-items:center; gap:10px; padding:9px 14px; cursor:pointer; transition:background 0.1s; border-bottom:1px solid #f5f5f5; }
+  .wh-option:last-child { border-bottom:none; }
+  .wh-option:hover { background:#f0f7ff; }
+  .wh-option input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#1F4E79; }
+  .wh-option label { font-size:12px; color:#333; cursor:pointer; flex:1; }
+  .wh-option .wh-chip { font-size:9px; color:#888; background:#f0f0f0; padding:1px 6px; border-radius:8px; }
+
   /* Warehouse popup */
   .wh-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center; }
   .wh-overlay.open { display:flex; }
@@ -115,6 +131,18 @@
   </div>
   <div class="header-right">
     <span class="stamp" id="ts">Stock as of: —</span>
+    <div class="wh-filter-wrap" id="whFilterWrap">
+      <button class="wh-filter-btn" onclick="toggleWhDropdown()">
+        🏭 Warehouses <span class="wh-filter-badge" id="whBadge">All</span> ▾
+      </button>
+      <div class="wh-dropdown" id="whDropdown">
+        <div class="wh-dropdown-header">
+          Select Warehouses
+          <span><a onclick="setAllWh(true)">All</a> &nbsp;·&nbsp; <a onclick="setAllWh(false)">None</a></span>
+        </div>
+        <div id="whCheckboxes"></div>
+      </div>
+    </div>
     <button class="refresh-btn" id="refreshBtn" onclick="fetchStock()">⟳ Refresh Stock</button>
   </div>
 </div>
@@ -188,6 +216,17 @@ const ALL_CODES = ["100003", "100022", "100171", "100404", "100408", "100415", "
 let PARTS = JSON.parse(JSON.stringify(PARTS_STATIC)); // mutable copy with live stock
 
 let xtN=1, pmN=1, activeTab='all', sortCol='shortage', sortDir=-1, tableData=[];
+let STOCK_BY_WH = {};   // { item_code: { "Stores-Bengaluru": qty, ... } }
+let ALL_WAREHOUSES = []; // sorted list of all warehouse names seen
+let SELECTED_WH = new Set(); // currently selected warehouses
+
+function getStockForItem(code) {
+  const whs = STOCK_BY_WH[code];
+  if (!whs) return 0;
+  return Object.entries(whs)
+    .filter(([wh]) => SELECTED_WH.size === 0 || SELECTED_WH.has(wh))
+    .reduce((s, [,q]) => s + q, 0);
+}
 
 // ── Live stock fetch ────────────────────────────────────────────────────────
 async function fetchStock() {
@@ -202,20 +241,28 @@ async function fetchStock() {
 
   try {
     const BATCH = 100;
-    const stock = {};
     for (let i = 0; i < ALL_CODES.length; i += BATCH) {
       const batch = ALL_CODES.slice(i, i + BATCH);
       const resp = await fetch('/api/stock?items=' + encodeURIComponent(batch.join(',')));
       if (!resp.ok) throw new Error(`API error: ${resp.status}`);
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      Object.assign(stock, data.stock);
+      Object.assign(STOCK_BY_WH, data.stock); // per-warehouse: { item: { wh: qty } }
       status.textContent = `Fetching… ${Math.min(i + BATCH, ALL_CODES.length)} / ${ALL_CODES.length} items`;
     }
 
-    // Update PARTS with live stock
+    // Build warehouse list from all seen warehouses
+    const whSet = new Set();
+    for (const whs of Object.values(STOCK_BY_WH)) {
+      Object.keys(whs).forEach(w => whSet.add(w));
+    }
+    ALL_WAREHOUSES = [...whSet].sort();
+    if (SELECTED_WH.size === 0) ALL_WAREHOUSES.forEach(w => SELECTED_WH.add(w));
+    buildWhDropdown();
+
+    // Update PARTS stock using selected warehouses
     for (const code of Object.keys(PARTS)) {
-      PARTS[code].stock = Math.round((stock[code] || 0) * 100) / 100;
+      PARTS[code].stock = Math.round(getStockForItem(code) * 100) / 100;
     }
 
     const now = new Date();
@@ -349,6 +396,64 @@ function setStickyTops() {
 [0,100].forEach(t=>setTimeout(setStickyTops,t));
 window.addEventListener('resize', setStickyTops);
 
+// ── Warehouse filter dropdown ───────────────────────────────────
+function buildWhDropdown() {
+  const container = document.getElementById('whCheckboxes');
+  container.innerHTML = ALL_WAREHOUSES.map(wh => {
+    const checked = SELECTED_WH.has(wh) ? 'checked' : '';
+    // Total stock across all items for this warehouse
+    const total = Object.values(STOCK_BY_WH).reduce((s, whs) => s + (whs[wh] || 0), 0);
+    return `<div class="wh-option">
+      <input type="checkbox" id="wh_${wh.replace(/\s/g,'_')}" ${checked} onchange="toggleWh('${wh}',this.checked)">
+      <label for="wh_${wh.replace(/\s/g,'_')}">${wh}</label>
+      <span class="wh-chip">${Math.round(total).toLocaleString()}</span>
+    </div>`;
+  }).join('');
+  updateWhBadge();
+}
+
+function toggleWh(wh, checked) {
+  if (checked) SELECTED_WH.add(wh); else SELECTED_WH.delete(wh);
+  updateWhBadge();
+  applyWhFilter();
+}
+
+function setAllWh(all) {
+  if (all) ALL_WAREHOUSES.forEach(w => SELECTED_WH.add(w));
+  else SELECTED_WH.clear();
+  buildWhDropdown();
+  applyWhFilter();
+}
+
+function updateWhBadge() {
+  const badge = document.getElementById('whBadge');
+  if (SELECTED_WH.size === ALL_WAREHOUSES.length || SELECTED_WH.size === 0) {
+    badge.textContent = 'All';
+    badge.style.background = '#e67e22';
+  } else {
+    badge.textContent = SELECTED_WH.size + '/' + ALL_WAREHOUSES.length;
+    badge.style.background = '#c0392b';
+  }
+}
+
+function applyWhFilter() {
+  // Recompute stock for each part based on selected warehouses
+  for (const code of Object.keys(PARTS)) {
+    PARTS[code].stock = Math.round(getStockForItem(code) * 100) / 100;
+  }
+  calculate();
+}
+
+function toggleWhDropdown() {
+  document.getElementById('whDropdown').classList.toggle('open');
+}
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!document.getElementById('whFilterWrap').contains(e.target)) {
+    document.getElementById('whDropdown').classList.remove('open');
+  }
+});
+
 // ── Warehouse popup ────────────────────────────────────────────
 async function showWH(code, name, uom) {
   document.getElementById('whTitle').textContent = code + ' — ' + name;
@@ -381,7 +486,7 @@ async function showWH(code, name, uom) {
         <tfoot><tr class="wh-total"><td colspan="2">Total</td><td class="wh-qty">${(+total.toFixed(2)).toLocaleString()}</td><td style="color:#aaa;font-size:10px;">${uom}</td></tr></tfoot>
       </table>`;
   } catch(err) {
-    document.getElementById('whBody').innerHTML = '<div class="wh-empty">Could not load warehouse data.</div>';
+    document.getElementById('whBody').innerHTML = `<div class="wh-empty">Could not load warehouse data.<br><span style="font-size:10px;color:#bbb;">${err.message}</span></div>`;
   }
 }
 function closeWH() { document.getElementById('whOverlay').classList.remove('open'); }
