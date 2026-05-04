@@ -597,7 +597,7 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') closeWH(); });
 function showPOs(code, name) {
   const pos = (INCOMING[code] && INCOMING[code].pos) || [];
   document.getElementById('poTitle').textContent = `Open POs — ${code} · ${name}`;
-  const erpBase = IS_LOCAL ? ERP : '';
+  const erpBase = 'https://amidc.frappe.cloud';
   document.getElementById('poList').innerHTML = pos.map(p => {
     const dateStr = p.schedule_date
       ? new Date(p.schedule_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
