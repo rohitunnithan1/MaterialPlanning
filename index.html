@@ -56,6 +56,31 @@
   .tab.active { background: #1F4E79; color: white; border-color: #1F4E79; }
   .search { margin-left: auto; padding: 5px 12px; border: 1.5px solid #dde3ec; border-radius: 20px; font-size: 11px; outline: none; width: 200px; }
 
+  /* Warehouse popup */
+  .wh-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center; }
+  .wh-overlay.open { display:flex; }
+  .wh-popup { background:white; border-radius:12px; min-width:360px; max-width:500px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2); overflow:hidden; }
+  .wh-head { background:#1F4E79; color:white; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; }
+  .wh-head h3 { font-size:13px; font-weight:700; margin:0; }
+  .wh-head .sub { font-size:10px; opacity:0.7; margin-top:2px; }
+  .wh-close { background:none; border:none; color:white; font-size:18px; cursor:pointer; opacity:0.7; padding:0; }
+  .wh-close:hover { opacity:1; }
+  .wh-body { padding:16px 18px; }
+  .wh-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  .wh-tbl th { text-align:left; padding:6px 10px; font-size:10px; font-weight:700; text-transform:uppercase; color:#888; border-bottom:2px solid #eee; }
+  .wh-tbl td { padding:8px 10px; border-bottom:1px solid #f5f5f5; }
+  .wh-tbl tr:last-child td { border-bottom:none; }
+  .wh-qty { text-align:right; font-weight:700; color:#1F4E79; }
+  .wh-bar-cell { width:80px; }
+  .wh-mini-bar { height:6px; background:#E8F4FD; border-radius:3px; }
+  .wh-mini-fill { height:100%; background:#2e6fa8; border-radius:3px; }
+  .wh-total td { font-weight:800; color:#1F4E79; border-top:2px solid #dde3ec !important; padding-top:10px; }
+  .wh-empty { text-align:center; color:#aaa; padding:24px; font-size:13px; }
+  .wh-loading { text-align:center; color:#888; padding:24px; font-size:12px; }
+  td.stock-cell { cursor:pointer; }
+  td.stock-cell strong { text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px; }
+  td.stock-cell:hover strong { color:#1F4E79; }
+
   .table-wrap { overflow-x: auto; overflow-y: auto; flex: 1 1 0; min-height: 0; padding: 0 32px 24px; }
   table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); font-size: 11px; }
   th { padding: 10px 11px; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; cursor: pointer; user-select: none; background: #1F4E79; color: white; position: sticky; top: 0; z-index: 10; }
@@ -120,6 +145,17 @@
   <button class="tab" onclick="setTab('common',this)">🟣 Common Parts</button>
   <button class="tab" onclick="setTab('zerostock',this)">⚫ Zero Stock</button>
   <input class="search" id="searchBox" type="text" placeholder="Search item code or name…" oninput="renderTable()">
+</div>
+
+<!-- Warehouse popup -->
+<div class="wh-overlay" id="whOverlay" onclick="if(event.target===this)closeWH()">
+  <div class="wh-popup">
+    <div class="wh-head">
+      <div><h3 id="whTitle">Stock Locations</h3><div class="sub" id="whSub"></div></div>
+      <button class="wh-close" onclick="closeWH()">✕</button>
+    </div>
+    <div class="wh-body" id="whBody"></div>
+  </div>
 </div>
 
 <div class="table-wrap">
@@ -289,7 +325,7 @@ function renderTable() {
       <td style="font-size:10px;color:#555;">${p.item_group||'<span style="color:#ccc;">—</span>'}</td>
       <td>${classBadge(p.cls)}</td>
       <td>${usedInBadge(p.usedIn)}</td>
-      <td><strong>${(p.stock||0).toLocaleString()}</strong> <span style="color:#aaa;font-size:9px;">${p.uom}</span></td>
+      <td class="stock-cell" onclick="showWH('${p.code}','${p.name.replace(/'/g,"\\'")}','${p.uom}')" title="Click to see warehouse breakdown"><strong>${(p.stock||0).toLocaleString()}</strong> <span style="color:#aaa;font-size:9px;">${p.uom}</span></td>
       <td style="text-align:center;">${p.safety_stock>0?'<strong style="color:#1F4E79;">'+p.safety_stock+'</strong>':'<span style="color:#ccc;">—</span>'}</td>
       <td style="color:#1F4E79;">${p.xt_qty>0?p.xt_qty:'<span style="color:#ddd;">—</span>'}</td>
       <td style="color:#C05000;">${p.pm_qty>0?p.pm_qty:'<span style="color:#ddd;">—</span>'}</td>
@@ -312,6 +348,44 @@ function setStickyTops() {
 }
 [0,100].forEach(t=>setTimeout(setStickyTops,t));
 window.addEventListener('resize', setStickyTops);
+
+// ── Warehouse popup ────────────────────────────────────────────
+async function showWH(code, name, uom) {
+  document.getElementById('whTitle').textContent = code + ' — ' + name;
+  document.getElementById('whSub').textContent = 'Live warehouse breakdown';
+  document.getElementById('whBody').innerHTML = '<div class="wh-loading">⟳ Fetching warehouse data…</div>';
+  document.getElementById('whOverlay').classList.add('open');
+  try {
+    const resp = await fetch('/api/warehouses?item=' + encodeURIComponent(code));
+    const data = await resp.json();
+    const entries = data.warehouses || [];
+    if (!entries.length) {
+      document.getElementById('whBody').innerHTML = '<div class="wh-empty">No stock found in any warehouse.</div>';
+      return;
+    }
+    const maxQty = entries[0].qty;
+    const total  = entries.reduce((s,e) => s + e.qty, 0);
+    const rows   = entries.map(e => {
+      const pct = maxQty > 0 ? (e.qty / maxQty * 100).toFixed(0) : 0;
+      return `<tr>
+        <td>${e.wh}</td>
+        <td class="wh-bar-cell"><div class="wh-mini-bar"><div class="wh-mini-fill" style="width:${pct}%"></div></div></td>
+        <td class="wh-qty">${(+e.qty.toFixed(2)).toLocaleString()}</td>
+        <td style="color:#aaa;font-size:10px;">${uom}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('whBody').innerHTML = `
+      <table class="wh-tbl">
+        <thead><tr><th>Warehouse</th><th></th><th style="text-align:right">Qty</th><th>UOM</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="wh-total"><td colspan="2">Total</td><td class="wh-qty">${(+total.toFixed(2)).toLocaleString()}</td><td style="color:#aaa;font-size:10px;">${uom}</td></tr></tfoot>
+      </table>`;
+  } catch(err) {
+    document.getElementById('whBody').innerHTML = '<div class="wh-empty">Could not load warehouse data.</div>';
+  }
+}
+function closeWH() { document.getElementById('whOverlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeWH(); });
 
 // Auto-fetch on load
 fetchStock();
