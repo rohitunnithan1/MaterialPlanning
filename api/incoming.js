@@ -53,10 +53,17 @@ export default async function handler(req, res) {
           if (pending <= 0) continue;
           const code = item.item_code;
           if (!incoming[code]) {
-            incoming[code] = { qty_pending: 0, earliest_date: null, supplier: result.po.supplier, po: result.po.name, po_count: 0 };
+            incoming[code] = { qty_pending: 0, earliest_date: null, po_count: 0, pos: [] };
           }
           incoming[code].qty_pending += pending;
           incoming[code].po_count++;
+          // Store each PO's details for linking
+          incoming[code].pos.push({
+            po: result.po.name,
+            supplier: result.po.supplier,
+            qty_pending: pending,
+            schedule_date: item.schedule_date || null
+          });
           // Track earliest expected date
           if (item.schedule_date) {
             if (!incoming[code].earliest_date || item.schedule_date < incoming[code].earliest_date) {

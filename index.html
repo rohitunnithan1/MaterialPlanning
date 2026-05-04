@@ -56,6 +56,25 @@
   .tab.active { background: #1F4E79; color: white; border-color: #1F4E79; }
   .search { margin-left: auto; padding: 5px 12px; border: 1.5px solid #dde3ec; border-radius: 20px; font-size: 11px; outline: none; width: 200px; }
 
+  /* PO list popup */
+  .po-popup-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center; }
+  .po-popup-overlay.open { display:flex; }
+  .po-popup { background:white; border-radius:10px; min-width:340px; max-width:480px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2); overflow:hidden; }
+  .po-popup-head { background:#1F4E79; color:white; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .po-popup-head h3 { font-size:12px; font-weight:700; margin:0; }
+  .po-popup-close { background:none; border:none; color:white; font-size:16px; cursor:pointer; opacity:0.7; }
+  .po-popup-close:hover { opacity:1; }
+  .po-list { padding:8px 0; }
+  .po-row { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid #f5f5f5; }
+  .po-row:last-child { border-bottom:none; }
+  .po-row a { font-size:12px; font-weight:700; color:#1F4E79; text-decoration:none; }
+  .po-row a:hover { text-decoration:underline; }
+  .po-row .po-meta { font-size:11px; color:#888; margin-top:2px; }
+  .po-row .po-qty { font-size:12px; font-weight:700; color:#1a5276; text-align:right; }
+  .po-row .po-date { font-size:10px; color:#888; }
+  td.on-order-cell { cursor:pointer; }
+  td.on-order-cell:hover span { text-decoration:underline; }
+
   /* Incoming PO highlight */
   .incoming-row td:first-child { border-left: 3px solid #2980b9 !important; }
   .badge-incoming { background: #d6eaf8; color: #1a5276; }
@@ -181,6 +200,17 @@
 </div>
 
 <!-- Warehouse popup -->
+<!-- PO list popup -->
+<div class="po-popup-overlay" id="poOverlay" onclick="if(event.target===this)closePO()">
+  <div class="po-popup">
+    <div class="po-popup-head">
+      <h3 id="poTitle">Open Purchase Orders</h3>
+      <button class="po-popup-close" onclick="closePO()">✕</button>
+    </div>
+    <div class="po-list" id="poList"></div>
+  </div>
+</div>
+
 <div class="wh-overlay" id="whOverlay" onclick="if(event.target===this)closeWH()">
   <div class="wh-popup">
     <div class="wh-head">
@@ -261,8 +291,9 @@ async function localIncoming() {
       for(const item of res.doc.items){
         const pending=(item.qty||0)-(item.received_qty||0);if(pending<=0)continue;
         const code=item.item_code;
-        if(!incoming[code])incoming[code]={qty_pending:0,earliest_date:null,supplier:res.po.supplier,po:res.po.name,po_count:0};
+        if(!incoming[code])incoming[code]={qty_pending:0,earliest_date:null,po_count:0,pos:[]};
         incoming[code].qty_pending+=pending;incoming[code].po_count++;
+        incoming[code].pos.push({po:res.po.name,supplier:res.po.supplier,qty_pending:pending,schedule_date:item.schedule_date||null});
         if(item.schedule_date&&(!incoming[code].earliest_date||item.schedule_date<incoming[code].earliest_date))incoming[code].earliest_date=item.schedule_date;
       }
     }
@@ -350,7 +381,7 @@ function calculate() {
       qty_pending: inc ? inc.qty_pending : 0,
       earliest_date: inc ? inc.earliest_date : null,
       po_count: inc ? inc.po_count : 0,
-      inc_supplier: inc ? inc.supplier : null
+      pos: inc ? (inc.pos || []) : []
     };
   }).filter(p => p.xt_qty>0 || p.pm_qty>0);
   updateSummary(); renderTable();
@@ -438,12 +469,15 @@ function renderTable() {
       <td style="color:#C05000;">${p.pm_qty>0?p.pm_qty:'<span style="color:#ddd;">—</span>'}</td>
       <td>${p.required>0?'<strong>'+p.required.toLocaleString()+'</strong>':'<span style="color:#ddd;">0</span>'}</td>
       <td>${p.shortage>0?'<strong style="color:#c0392b;">-'+p.shortage.toLocaleString()+'</strong>':'<span style="color:#27ae60;">0</span>'}</td>
-      <td style="text-align:center;">${p.qty_pending>0
-        ? `<span style="color:#1a5276;font-weight:700;">+${Math.round(p.qty_pending).toLocaleString()}</span>${p.earliest_date
-            ? `<br><span style="font-size:9px;color:#888;">${new Date(p.earliest_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>`
-            : ''}`
-        : '<span style="color:#ccc;font-size:10px;">—</span>'
-      }</td>
+      <td class="${p.qty_pending>0?'on-order-cell':''}" style="text-align:center;"
+          ${p.qty_pending>0?`onclick="showPOs('${p.code}','${p.name.replace(/'/g,"\\'")}','${JSON.stringify(p.pos||[]).replace(/'/g,"\\'")}')"`:''}
+          title="${p.qty_pending>0?'Click to view POs':''}">
+        ${p.qty_pending>0
+          ? `<span style="color:#1a5276;font-weight:700;">+${Math.round(p.qty_pending).toLocaleString()}</span>${p.earliest_date
+              ? `<br><span style="font-size:9px;color:${new Date(p.earliest_date)<new Date()?'#c0392b':'#888'};">${new Date(p.earliest_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>`
+              : ''}`
+          : '<span style="color:#ccc;font-size:10px;">—</span>'}
+      </td>
       <td><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%;background:${barColor(pct)};"></span></span>
           <span style="font-size:9px;color:#666;margin-left:4px;">${pct.toFixed(0)}%</span></td>
       <td style="text-align:center;">${p.lead_time>0?`<span style="font-size:10px;font-weight:600;color:${p.lead_time>=60?'#c0392b':p.lead_time>=30?'#e67e22':'#27ae60'}">${p.lead_time}d</span>`:'<span style="color:#ccc;">—</span>'}</td>
@@ -558,6 +592,32 @@ async function showWH(code, name, uom) {
 }
 function closeWH() { document.getElementById('whOverlay').classList.remove('open'); }
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeWH(); });
+
+// ── PO list popup ──────────────────────────────────────────────
+function showPOs(code, name, posJson) {
+  const pos = JSON.parse(posJson);
+  document.getElementById('poTitle').textContent = `Open POs — ${code} · ${name}`;
+  const erpBase = IS_LOCAL ? ERP : '';
+  document.getElementById('poList').innerHTML = pos.map(p => {
+    const dateStr = p.schedule_date
+      ? new Date(p.schedule_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+      : '—';
+    const isOverdue = p.schedule_date && new Date(p.schedule_date) < new Date();
+    return `<div class="po-row">
+      <div>
+        <a href="${erpBase}/app/purchase-order/${p.po}" target="_blank">🔗 ${p.po}</a>
+        <div class="po-meta">${p.supplier}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="po-qty">+${Math.round(p.qty_pending)} units</div>
+        <div class="po-date" style="color:${isOverdue?'#c0392b':'#888'};">${isOverdue?'⚠ Overdue · ':''}${dateStr}</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('poOverlay').classList.add('open');
+}
+function closePO() { document.getElementById('poOverlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ closeWH(); closePO(); } });
 
 // ── Incoming PO fetch ───────────────────────────────────────────
 async function fetchIncoming() {
