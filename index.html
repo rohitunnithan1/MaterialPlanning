@@ -271,7 +271,7 @@ async function fetchStock() {
     });
     bar.className = 'loading-bar done';
     status.className = 'fetch-status';
-    status.textContent = `✓ Stock updated — ${Object.keys(stock).length} items fetched from ERPNext`;
+    status.textContent = `✓ Stock updated — ${Object.keys(STOCK_BY_WH).length} items fetched from ERPNext`;
     calculate();
   } catch(err) {
     bar.className = 'loading-bar error';
