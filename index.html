@@ -75,6 +75,21 @@
   td.on-order-cell { cursor:pointer; }
   td.on-order-cell:hover span { text-decoration:underline; }
 
+  /* BOM info bar */
+  .bom-bar { display:flex; gap:0; background:#f8fbff; border-bottom:1px solid #dde3ec; flex-shrink:0; flex-wrap:wrap; }
+  .bom-card { display:flex; align-items:center; gap:10px; padding:8px 20px; border-right:1px solid #dde3ec; flex:1; min-width:280px; }
+  .bom-card:last-child { border-right:none; }
+  .bom-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .bom-dot.xt { background:#1F4E79; }
+  .bom-dot.pm { background:#C05000; }
+  .bom-info { flex:1; }
+  .bom-name { font-size:11px; font-weight:700; color:#333; }
+  .bom-meta { font-size:10px; color:#888; margin-top:1px; }
+  .bom-link { font-size:10px; color:#1F4E79; text-decoration:none; font-weight:600; }
+  .bom-link:hover { text-decoration:underline; }
+  .bom-stale { display:inline-block; font-size:9px; background:#FEF3CD; color:#856404; border:1px solid #FFD700; border-radius:4px; padding:1px 5px; margin-left:6px; }
+  .bom-fresh { display:inline-block; font-size:9px; background:#FDE8E8; color:#C0392B; border:1px solid #e74c3c; border-radius:4px; padding:1px 5px; margin-left:6px; }
+
   /* Incoming PO highlight */
   .incoming-row td:first-child { border-left: 3px solid #2980b9 !important; }
   .badge-incoming { background: #d6eaf8; color: #1a5276; }
@@ -173,6 +188,7 @@
 
 <div class="loading-bar" id="loadingBar"></div>
 <div class="fetch-status" id="fetchStatus">Fetching live stock from ERPNext…</div>
+<div class="bom-bar" id="bomBar"></div>
 
 <div class="controls" id="controlsBar">
   <div class="ctrl-group">
@@ -618,6 +634,45 @@ function showPOs(code, name) {
 }
 function closePO() { document.getElementById('poOverlay').classList.remove('open'); }
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ closeWH(); closePO(); } });
+
+// ── BOM info bar ───────────────────────────────────────────────
+const BOM_IDS = [
+  { product: 'XT Lite', bom: 'BOM-50010103-005', item: '50010103', cls: 'xt' },
+  { product: 'PM v2',   bom: 'BOM-999-00003-002', item: '999-00003', cls: 'pm' }
+];
+
+async function fetchBOMInfo() {
+  const bar = document.getElementById('bomBar');
+  const erpBase = 'https://amidc.frappe.cloud';
+  try {
+    const results = await Promise.all(BOM_IDS.map(b =>
+      fetch(`${erpBase}/api/resource/BOM/${b.bom}?fields=["name","modified","modified_by"]`,
+        {headers:{'Authorization':'token cbba80ff294e111:e70b3d69749274a'}})
+      .then(r=>r.json()).then(d=>({...b, ...d.data})).catch(()=>b)
+    ));
+    const now = new Date();
+    bar.innerHTML = results.map(r => {
+      const modDate = r.modified ? new Date(r.modified) : null;
+      const daysAgo = modDate ? Math.floor((now - modDate) / 86400000) : null;
+      const modStr  = modDate ? modDate.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+      const modBy   = r.modified_by ? r.modified_by.split('@')[0] : '';
+      let badge = '';
+      if (daysAgo !== null && daysAgo <= 7)  badge = `<span class="bom-fresh">⚠ Changed ${daysAgo === 0 ? 'today' : daysAgo + 'd ago'}</span>`;
+      else if (daysAgo !== null && daysAgo <= 30) badge = `<span class="bom-stale">Updated ${daysAgo}d ago</span>`;
+      return `<div class="bom-card">
+        <div class="bom-dot ${r.cls}"></div>
+        <div class="bom-info">
+          <div class="bom-name">${r.product} &nbsp;
+            <a class="bom-link" href="${erpBase}/app/bom/${r.bom}" target="_blank">${r.bom}</a>
+            ${badge}
+          </div>
+          <div class="bom-meta">Last modified: ${modStr}${modBy ? ' · by ' + modBy : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { bar.style.display = 'none'; }
+}
+fetchBOMInfo();
 
 // ── Incoming PO fetch ───────────────────────────────────────────
 async function fetchIncoming() {
