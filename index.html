@@ -198,6 +198,8 @@
       <input class="qty-input xt" id="xtQty" type="number" value="1" min="0" max="999">
       <span class="prod-badge pm-badge">🏗️ PM v2</span>
       <input class="qty-input pm" id="pmQty" type="number" value="1" min="0" max="999">
+      <span class="prod-badge" style="background:#E8F8EE;color:#1E8449;border:1.5px solid #27ae60;">🚜 10K</span>
+      <input class="qty-input" id="k10Qty" type="number" value="1" min="0" max="999" style="border-color:#27ae60;color:#1E8449;">
       <button class="btn btn-primary" onclick="calculate()">▶ Calculate</button>
     </div>
   </div>
@@ -653,8 +655,9 @@ async function fetchBOMInfo() {
   const erpBase = 'https://amidc.frappe.cloud';
   try {
     const results = await Promise.all(BOM_IDS.map(b =>
-      fetch(`${erpBase}/api/resource/BOM/${b.bom}?fields=["name","modified","modified_by","is_active","is_default","docstatus","workflow_state"]`,
-        {headers:{'Authorization':'token cbba80ff294e111:e70b3d69749274a'}})
+      (IS_LOCAL
+        ? fetch(`${ERP}/api/resource/BOM/${b.bom}?fields=["name","modified","modified_by","is_active","is_default","docstatus","workflow_state"]`, {headers:ERP_HDR})
+        : fetch(`/api/bom?action=info&bom=${b.bom}`))
       .then(r=>r.json()).then(d=>({...b, ...d.data})).catch(()=>b)
     ));
     const now = new Date();
@@ -708,14 +711,16 @@ async function checkLatestBOMs() {
       const prefix = parts.slice(0, -1).join('-');
 
       // Fetch ALL BOMs for this item to find the highest version
-      const f = encodeURIComponent(JSON.stringify([['item','=',b.item]]));
-      const d = await fetch(`${erpBase}/api/resource/BOM?filters=${f}&fields=["name","docstatus","is_active","is_default"]&limit=50`,
-        {headers:{'Authorization':'token cbba80ff294e111:e70b3d69749274a'}}).then(r=>r.json());
+      const d = await (IS_LOCAL
+        ? fetch(`${ERP}/api/resource/BOM?filters=${encodeURIComponent(JSON.stringify([['item','=',b.item]]))}&fields=["name","docstatus","is_active","is_default"]&limit=50`, {headers:ERP_HDR})
+        : fetch(`/api/bom?action=latest&item=${encodeURIComponent(b.item)}`))
+        .then(r=>r.json());
+      const bomList = d.data || d.boms || [];
 
       // Find highest version number
       let latestVer = currentVer;
       let latestBOM = null;
-      for (const bom of (d.data || [])) {
+      for (const bom of bomList) {
         const p = bom.name.split('-');
         const v = parseInt(p[p.length - 1], 10);
         if (!isNaN(v) && v > latestVer) { latestVer = v; latestBOM = bom; }
