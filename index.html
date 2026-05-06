@@ -358,7 +358,12 @@ async function fetchStock() {
       Object.keys(whs).forEach(w => whSet.add(w));
     }
     ALL_WAREHOUSES = [...whSet].sort();
-    if (SELECTED_WH.size === 0) ALL_WAREHOUSES.forEach(w => SELECTED_WH.add(w));
+    if (SELECTED_WH.size === 0) {
+      // Default: only Stores-Bengaluru selected
+      const def = 'Stores-Bengaluru';
+      if (ALL_WAREHOUSES.includes(def)) SELECTED_WH.add(def);
+      else ALL_WAREHOUSES.forEach(w => SELECTED_WH.add(w)); // fallback: all
+    }
     buildWhDropdown();
 
     // Update PARTS stock using selected warehouses
