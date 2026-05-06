@@ -216,6 +216,7 @@
   <button class="tab" onclick="setTab('common',this)">🟣 Common Parts</button>
   <button class="tab" onclick="setTab('zerostock',this)">⚫ Zero Stock</button>
   <input class="search" id="searchBox" type="text" placeholder="Search item code or name…" oninput="renderTable()">
+  <button onclick="exportCSV()" style="padding:5px 14px;background:#1F4E79;color:white;border:none;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:6px;">⬇ Export Report</button>
 </div>
 
 <!-- Warehouse popup -->
@@ -524,6 +525,59 @@ function setStickyTops() {
 }
 [0,100].forEach(t=>setTimeout(setStickyTops,t));
 window.addEventListener('resize', setStickyTops);
+
+// ── Export CSV ─────────────────────────────────────────────────
+function exportCSV() {
+  const now = new Date();
+  const stamp = now.toISOString().split('T')[0];
+  const tabName = activeTab === 'all' ? 'All Parts' : activeTab === 'shortage' ? 'Shortages Only'
+    : activeTab === 'xt' ? 'XT Lite' : activeTab === 'pm' ? 'PM v2'
+    : activeTab === '10k' ? 'Sherpa 10K' : activeTab === 'common' ? 'Common Parts' : 'Zero Stock';
+
+  const headers = ['Item Code','Item Name','Item Group','Class','Used In',
+    'Stock','UOM','Safety Stock','XT Qty/Unit','PM Qty/Unit','10K Qty/Unit',
+    'Total Required','Shortage','Coverage %','Lead Time (days)',
+    'On Order Qty','Expected Date','Status'];
+
+  const escape = v => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+
+  const statusText = p => {
+    if (p.shortage === 0) return 'OK';
+    if (p.qty_pending > 0 && p.qty_pending >= p.shortage) return 'Incoming';
+    if (p.qty_pending > 0) return 'Short + PO';
+    if (p.stock <= 0) return 'Zero Stock';
+    return 'Short';
+  };
+
+  // Use all tableData (respects current tab/search filter)
+  const rows = tableData.map(p => [
+    p.code, p.name, p.item_group||'', p.cls||'',
+    p.usedIn.replace(/\+/g,' / ').toUpperCase(),
+    p.stock, p.uom, p.safety_stock||0,
+    p.xt_qty||0, p.pm_qty||0, p.k10_qty||0,
+    p.required, p.shortage,
+    p.coverage.toFixed(1),
+    p.lead_time||0,
+    p.qty_pending||0,
+    p.earliest_date||'',
+    statusText(p)
+  ].map(escape).join(','));
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `material-shortage-${tabName.toLowerCase().replace(/\s+/g,'-')}-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ── Warehouse filter dropdown ───────────────────────────────────
 function buildWhDropdown() {
