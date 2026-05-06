@@ -457,7 +457,7 @@ function renderTable() {
     return sortDir*(bv-av);
   });
 
-  const usedInBadge = u => u==='both'?'<span class="badge badge-both">XT + PM</span>':u==='xt'?'<span class="badge badge-xt">XT Lite</span>':'<span class="badge badge-pm">PM v2</span>';
+  const usedInBadge = u => { const parts=u.split('+'); const labels={xt:'<span class="badge badge-xt">XT</span>',pm:'<span class="badge badge-pm">PM</span>','10k':'<span class="badge" style="background:#E8F8EE;color:#1E8449;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;">10K</span>'}; return parts.map(p=>labels[p]||'').join(' '); };
   const classBadge = c => {
     if(!c) return '<span style="color:#ccc;font-size:9px;">—</span>';
     const m={'Class A':'clsA','Class B':'clsB','Class C':'clsC','Class Common':'clsCom'};
@@ -656,9 +656,9 @@ async function fetchBOMInfo() {
   try {
     const results = await Promise.all(BOM_IDS.map(b =>
       (IS_LOCAL
-        ? fetch(`${ERP}/api/resource/BOM/${b.bom}?fields=["name","modified","modified_by","is_active","is_default","docstatus","workflow_state"]`, {headers:ERP_HDR})
-        : fetch(`/api/bom?action=info&bom=${b.bom}`))
-      .then(r=>r.json()).then(d=>({...b, ...d.data})).catch(()=>b)
+        ? fetch(`${ERP}/api/resource/BOM/${b.bom}?fields=["name","modified","modified_by","is_active","is_default","docstatus","workflow_state"]`, {headers:ERP_HDR}).then(r=>r.json()).then(d=>({...b, ...d.data}))
+        : fetch(`/api/bom?action=info&bom=${b.bom}`).then(r=>r.json()).then(d=>({...b, ...d})))
+      .catch(()=>b)
     ));
     const now = new Date();
     bar.innerHTML = results.map(r => {
