@@ -405,7 +405,7 @@ function calculate() {
       po_count: inc ? inc.po_count : 0,
       pos: inc ? (inc.pos || []) : []
     };
-  }).filter(p => p.xt_qty>0 || p.pm_qty>0);
+  }).filter(p => p.xt_qty>0 || p.pm_qty>0 || (p.k10_qty||0)>0);
   updateSummary(); renderTable();
 }
 
