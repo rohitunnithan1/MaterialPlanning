@@ -271,6 +271,28 @@ body { font-family:Arial,sans-serif; background:#f0f4f8; color:#1a2035; display:
   </div>
 </div>
 
+<!-- Warehouse popup -->
+<!-- PO list popup -->
+<div class="po-popup-overlay" id="poOverlay" onclick="if(event.target===this)closePO()">
+  <div class="po-popup">
+    <div class="po-popup-head">
+      <h3 id="poTitle">Open Purchase Orders</h3>
+      <button class="po-popup-close" onclick="closePO()">✕</button>
+    </div>
+    <div class="po-list" id="poList"></div>
+  </div>
+</div>
+
+<div class="wh-overlay" id="whOverlay" onclick="if(event.target===this)closeWH()">
+  <div class="wh-popup">
+    <div class="wh-head">
+      <div><h3 id="whTitle">Stock Locations</h3><div class="sub" id="whSub"></div></div>
+      <button class="wh-close" onclick="closeWH()">✕</button>
+    </div>
+    <div class="wh-body" id="whBody"></div>
+  </div>
+</div>
+
 <!-- Section 1: Material Planning (existing index.html) -->
 <div id="section-planning" class="section active">
 <div class="loading-bar" id="loadingBar"></div>
@@ -304,28 +326,6 @@ body { font-family:Arial,sans-serif; background:#f0f4f8; color:#1a2035; display:
   <button class="tab" onclick="setTab('zerostock',this)">⚫ Zero Stock</button>
   <input class="search" id="searchBox" type="text" placeholder="Search item code or name…" oninput="renderTable()">
   <button onclick="exportCSV()" style="padding:5px 14px;background:#1F4E79;color:white;border:none;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:6px;">⬇ Export Report</button>
-</div>
-
-<!-- Warehouse popup -->
-<!-- PO list popup -->
-<div class="po-popup-overlay" id="poOverlay" onclick="if(event.target===this)closePO()">
-  <div class="po-popup">
-    <div class="po-popup-head">
-      <h3 id="poTitle">Open Purchase Orders</h3>
-      <button class="po-popup-close" onclick="closePO()">✕</button>
-    </div>
-    <div class="po-list" id="poList"></div>
-  </div>
-</div>
-
-<div class="wh-overlay" id="whOverlay" onclick="if(event.target===this)closeWH()">
-  <div class="wh-popup">
-    <div class="wh-head">
-      <div><h3 id="whTitle">Stock Locations</h3><div class="sub" id="whSub"></div></div>
-      <button class="wh-close" onclick="closeWH()">✕</button>
-    </div>
-    <div class="wh-body" id="whBody"></div>
-  </div>
 </div>
 
 <div class="table-wrap">
@@ -482,7 +482,22 @@ async function fetchStock() {
     status.className = 'fetch-status';
     status.textContent = `✓ Stock updated — ${Object.keys(STOCK_BY_WH).length} items fetched · Loading open POs…`;
     fetchIncoming();
-    if(typeof render === 'function') render(); // refresh SDF stock columns // kick off in background, non-blocking
+    if(typeof render === 'function') render(); // refresh SDF stock columns
+    // Also fetch stock for SMR items not covered by BOM codes
+    const sdfCodes = typeof ITEMS !== 'undefined' ? ITEMS.map(i=>i.code).filter(c=>!STOCK_BY_WH[c]) : [];
+    if(sdfCodes.length > 0) {
+      const SDF_BATCH = 100;
+      for(let si=0; si<sdfCodes.length; si+=SDF_BATCH) {
+        const batch = sdfCodes.slice(si, si+SDF_BATCH);
+        try {
+          const sdfResp = IS_LOCAL
+            ? await localStock(batch)
+            : await fetch('/api/stock?items='+encodeURIComponent(batch.join(','))).then(r=>r.json());
+          Object.assign(STOCK_BY_WH, sdfResp.stock||{});
+        } catch(e) {}
+      }
+      if(typeof render === 'function') render(); // re-render with full SDF stock
+    }
     calculate();
   } catch(err) {
     bar.className = 'loading-bar error';
